@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      // Reset activity select (keep placeholder)
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -23,12 +25,30 @@ document.addEventListener("DOMContentLoaded", () => {
         // Build participants HTML
         let participantsHTML = "";
         if (details.participants && details.participants.length > 0) {
+          // build participants list with delete buttons
+          const participantItems = details.participants
+            .map((p) => {
+              // using data attributes to identify participant email
+              return `<li class="participant-item" data-activity="${escapeHtml(
+                name
+              )}" data-email="${escapeHtml(p)}">
+                        <span class="participant-email">${escapeHtml(p)}</span>
+                        <button class="participant-delete" title="Unregister ${escapeHtml(
+                          p
+                        )}" aria-label="Unregister ${escapeHtml(p)}">
+                          <!-- simple trash icon -->
+                          <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 6h18v2H3V6zm2 3h14l-1 12H6L5 9zm3-7h6l1 2H7l1-2z"/>
+                          </svg>
+                        </button>
+                      </li>`;
+            })
+            .join("");
+
           participantsHTML = `<div class="participants-section">
               <strong>Participants:</strong>
               <ul class="participants-list">
-                ${details.participants
-                  .map((p) => `<li class="participant-item">${escapeHtml(p)}</li>`)
-                  .join("")}
+                ${participantItems}
               </ul>
             </div>`;
         } else {
@@ -51,6 +71,7 @@ document.addEventListener("DOMContentLoaded", () => {
         option.textContent = name;
         activitySelect.appendChild(option);
       });
+      
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
       console.error("Error fetching activities:", error);
@@ -78,6 +99,8 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activities to show the newly registered participant
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
@@ -94,6 +117,40 @@ document.addEventListener("DOMContentLoaded", () => {
       messageDiv.className = "error";
       messageDiv.classList.remove("hidden");
       console.error("Error signing up:", error);
+    }
+  });
+
+  // Attach event listeners for delete buttons (delegation) once
+  activitiesList.addEventListener("click", async (e) => {
+    const deleteBtn = e.target.closest(".participant-delete");
+    if (!deleteBtn) return;
+
+    const li = deleteBtn.closest(".participant-item");
+    if (!li) return;
+
+    const activityName = li.getAttribute("data-activity");
+    const email = li.getAttribute("data-email");
+
+    if (!activityName || !email) return;
+
+    try {
+      const resp = await fetch(
+        `/activities/${encodeURIComponent(activityName)}/participants?email=${encodeURIComponent(
+          email
+        )}`,
+        { method: "DELETE" }
+      );
+
+      if (resp.ok) {
+        // Re-fetch activities to update UI and counts
+        await fetchActivities();
+      } else {
+        const res = await resp.json().catch(() => ({}));
+        alert(res.detail || "Failed to unregister participant");
+      }
+    } catch (err) {
+      console.error("Error unregistering participant:", err);
+      alert("Failed to unregister participant. Check console for details.");
     }
   });
 
